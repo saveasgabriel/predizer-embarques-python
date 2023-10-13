@@ -84,8 +84,6 @@ class Aprendizado:
                 'classifier__n_estimators': [100, 200, 300],
                 'classifier__learning_rate': [0.01, 0.1, 0.2],
                 'classifier__max_depth': [3, 4, 5],
-                'classifier__min_samples_split': [2, 5, 10],
-                'classifier__min_samples_leaf': [1, 2, 4]
             },
             'AdaBoost': {
                 'classifier__n_estimators': [50, 100, 200],
