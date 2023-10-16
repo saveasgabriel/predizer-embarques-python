@@ -10,8 +10,6 @@ num_dias = 35
 num_seed = 10
 
 
-aprendizado = Aprendizado(seed=num_seed) 
-
 df_original = pd.read_excel("base_completa_sem_filtro.xlsx", sheet_name="completo")
 
 df_teste = pd.read_excel("futuro.xlsx", sheet_name="completo")
@@ -32,10 +30,18 @@ X_treino = df_treino_recortado[colunas_features]
 
 y_treino = df_treino_recortado[colunas_target]
 
-aprendizado = Aprendizado(10)
 
-modelo_inicial = aprendizado.identificar_melhor_modelo(X_treino, y_treino)
 
+
+aprendizado = Aprendizado()
+
+aprendizado.identificar_melhor_modelo(X_treino, y_treino)
+aprendizado.imprimir_informacoes_modelo()
+aprendizado.otimizar_modelo_com_hiperparametros(X_treino, y_treino)
+print('A acurácia do modelo é: %.2f%%' % (aprendizado.modelo_otimizado.score(X_treino,y_treino) *100))
+
+
+"""
 modelo = modelo_inicial[1]
 
 hyperparametros = modelo_inicial[3]
@@ -60,7 +66,7 @@ diretorio_previsao = 'previsoes\\'
 aprendizado.prever_e_salvar(modelo_otimizado, df_teste_transformado, diretorio_previsao)
 
 
-
+"""
 
     
     

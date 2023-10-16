@@ -18,14 +18,15 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
-import matplotlib.pyplot as plt
 
 class Aprendizado:
-    def __init__(self, seed=10):
-        self.seed = seed
+    def __init__(self):
+        self.seed = 10
         self.kfold = KFold(n_splits=10, random_state=self.seed, shuffle=True)
-        self.numeric_features = ['Código Terceiro', 'numero_dia_acordada', 'Terceiro Centralizador', 'faixa_de_peso']
-        self.categorical_features = ['LINHA', 'Cidade', 'UF']
+        self.features = Features()
+        self.numeric_features = self.features.numeric()
+        self.categorical_features = self.features.categorical()
+        self.hiperparametros = Hiperparametros()
 
         self.numeric_transformer = Pipeline(steps=[
             ('imputer', SimpleImputer(strategy='median')),
@@ -44,91 +45,70 @@ class Aprendizado:
                 ('cat', self.categorical_transformer, self.categorical_features)
             ])
 
-        self.modelos = {
-            'Random Forest': RandomForestClassifier(),
-            'Decision Tree': DecisionTreeClassifier(),
-            'SVM': SVC(),
-            'KNN': KNeighborsClassifier(),
-            'Gradient Boosting': GradientBoostingClassifier(),
-            'AdaBoost': AdaBoostClassifier()
-        }
-
-        # Hiperparâmetros para cada modelo
-        self.hiperparametros = {
-            'Random Forest': {
-                'classifier__n_estimators': [100, 200, 300],
-                'classifier__max_depth': [None, 10, 20, 30],
-                'classifier__min_samples_split': [2, 5, 10],
-                'classifier__min_samples_leaf': [1, 2, 4],
-                'classifier__max_features': ['auto', 'sqrt', 'log2']
-            },
-            'Decision Tree': {
-                'classifier__criterion': ['gini', 'entropy'],
-                'classifier__splitter': ['best', 'random'],
-                'classifier__max_depth': [None, 10, 20, 30],
-                'classifier__min_samples_split': [2, 5, 10],
-                'classifier__min_samples_leaf': [1, 2, 4]
-            },
-            'SVM': {
-                'classifier__C': [0.1, 1, 10],
-                'classifier__kernel': ['linear', 'rbf', 'poly'],
-                'classifier__gamma': ['scale', 'auto', 0.1, 1],
-                'classifier__degree': [2, 3, 4]
-            },
-            'KNN': {
-                'classifier__n_neighbors': [3, 5, 7, 9],
-                'classifier__weights': ['uniform', 'distance'],
-                'classifier__algorithm': ['auto', 'ball_tree', 'kd_tree'],
-                'classifier__p': [1, 2]
-            },
-            'Gradient Boosting': {
-                'classifier__n_estimators': [100, 200, 300],
-                'classifier__learning_rate': [0.01, 0.1, 0.2],
-                'classifier__max_depth': [3, 4, 5]
-            },
-            'AdaBoost': {
-                'classifier__n_estimators': [50, 100, 200],
-                'classifier__learning_rate': [0.01, 0.1, 0.2]
-            }
-        }
-        
-    def prever_com_modelo_otimizado(self, modelo_otimizado, X_novos_dados):
+    """def prever_com_modelo_otimizado(self, modelo_otimizado, X_novos_dados):
         X_preprocess = pd.DataFrame(X_novos_dados, columns=self.numeric_features + self.categorical_features)
         previsoes = modelo_otimizado.predict(X_preprocess)
-        return previsoes
+        return previsoes"""
 
-    def identificar_melhor_modelo(self, X: pd.DataFrame, y: pd.Series):
-        melhor_modelo = None
+    def identificar_melhor_modelo(self, X, y):
         melhor_score = 0
-        X_preprocess = pd.DataFrame(X, columns=self.numeric_features + self.categorical_features)
+        X_preprocess = pd.DataFrame(X, columns = self.numeric_features + self.categorical_features)
         y_np = y.values
 
-        for nome_modelo, modelo in self.modelos.items():
+        for nome_modelo, params in self.hiperparametros.get_hiperparametros().items():
+            modelo = params['model']
+            hiperparametros = params['params']
             pipeline = Pipeline(steps=[('preprocessor', self.preprocessor), ('classifier', modelo)])
             score = cross_val_score(pipeline, X_preprocess, y_np, cv=self.kfold, error_score='raise')
             score_medio = np.mean(score)
+
             if score_medio > melhor_score:
-                parametros = self.hiperparametros.get(nome_modelo, None)
                 melhor_score = score_medio
-                melhor_modelo = (nome_modelo, modelo, score, parametros)
-        return melhor_modelo
-    
+                self.informacoes_melhor_modelo = (nome_modelo, modelo, score_medio, score, hiperparametros)
+                self.hiperparametros = hiperparametros
+                self.melhor_modelo = modelo  
+
+
+    def imprimir_informacoes_modelo_otimizado(self):
+        #print('A acurácia do modelo é: %.2f%%' % (self.modelo_otimizado.score(X_treino,y_treino) *100))
+        pass
+
+    def imprimir_informacoes_modelo(self):
+        nome_modelo, modelo, score_medio, scores, hiperparametros = self.informacoes_melhor_modelo
+
+        print("Nome do modelo:", nome_modelo)
+        print("Modelo:", modelo)
+        print(f"Score médio: {score_medio:.2f}")
+        print("Scores unitários:")
+        for i, score in enumerate(scores):
+            print(f"    Fold {i+1}: {score:.2f}")
+        print("Hiperparâmetros:")
+        for parametro, valores in hiperparametros.items():
+            print(f"    {parametro}: {valores}")
+
+
+    """
     def prever_e_salvar(self, modelo_otimizado, X_novos_dados, caminho_saida):
         X_preprocess = pd.DataFrame(X_novos_dados, columns=self.numeric_features + self.categorical_features)
         previsoes = modelo_otimizado.predict(X_preprocess)
         df_previsoes = pd.DataFrame(previsoes, columns=['Previsões'])
         df_final = pd.concat([X_preprocess, df_previsoes], axis=1)
         file_path = os.path.join(caminho_saida, 'nome_arquivo.xlsx')
-        df_final.to_excel(file_path, index=False)
+        df_final.to_excel(file_path, index=False)"""
     
-    def otimizar_modelo_com_hiperparametros(self, X: pd.DataFrame, y: pd.Series, modelo, hiperparametros):
+    def otimizar_modelo_com_hiperparametros(self, X, y):
+
         X_preprocess = pd.DataFrame(X, columns=self.numeric_features + self.categorical_features)
         y_np = y.values
-        pipeline = Pipeline(steps=[('preprocessor', self.preprocessor), ('classifier', modelo)])
-        modelo = GridSearchCV(estimator=pipeline, param_grid=hiperparametros, cv=self.kfold)
+        pipeline = Pipeline(steps=[('preprocessor', self.preprocessor), ('classifier', self.melhor_modelo)])
+        modelo = GridSearchCV(estimator=pipeline, param_grid=self.hiperparametros, cv=self.kfold)
+
+        print(self.melhor_modelo)
+        print(self.hiperparametros)
+
         modelo.fit(X_preprocess, y_np)
-        modelo_otimizado = modelo.best_estimator_
-        return modelo_otimizado
+        self.modelo_otimizado = modelo.best_estimator_
+
     
 class TransformadorDados:
     def __init__(self, treino=False):
@@ -138,8 +118,10 @@ class TransformadorDados:
         self.rotulos_peso = [500, 1500, 5000, 28000]
 
     def transformar(self, df):
-        
-        print(type(df))
+
+
+
+
         
         if self.treino == True:
             df = df.drop_duplicates()
@@ -150,7 +132,7 @@ class TransformadorDados:
             df['numero_dia_pcp'] = df['Data PCP'].dt.dayofweek
             colunas_desejadas = ['Data PCP', 'LINHA', 'Código Terceiro', 'Cidade', 'UF', 'Peso Líquido Estimado', 'Terceiro Centralizador', 'Data Acordada', 'numero_dia_pcp']
         else:
-            colunas_desejadas = ['LINHA', 'Código Terceiro', 'Cidade', 'UF', 'Peso Líquido Estimado', 'Terceiro Centralizador', 'Produto', 'Data Acordada']
+            colunas_desejadas = ['LINHA', 'Código Terceiro', 'Cidade', 'UF', 'Peso Líquido Estimado', 'Terceiro Centralizador', 'Data Acordada']
             df = df.drop_duplicates()
             df.dropna()
 
@@ -184,3 +166,81 @@ class TransformadorDados:
         data_inicio = data_mais_recente - timedelta(days=num_dias)
         df_recortado = df.loc[(df['Data PCP'] >= data_inicio) & (df['Data PCP'] <= data_mais_recente)]
         return df_recortado
+    
+class Features:
+    def numeric(self):
+       return ['Código Terceiro', 'numero_dia_acordada', 'Terceiro Centralizador', 'faixa_de_peso']
+    
+    def categorical(self):
+       return ['LINHA', 'Cidade', 'UF']
+    
+    def target(self):
+        return ['Data PCP']
+    
+    def decision(self):
+        return ['Situação da Entrega']
+
+    def reference(self):
+        return ['Data de Embarque']
+    
+    def avulsos(self):
+        return ['Data Acordada', 'Peso Líquido Estimado']
+
+
+class Hiperparametros:
+    def get_hiperparametros(self):
+        return {
+            'Random Forest': {
+                'model': RandomForestClassifier(),
+                'params': {
+                    'classifier__n_estimators': [100, 200, 300],
+                    'classifier__max_depth': [None, 10, 20, 30],
+                    'classifier__min_samples_split': [2, 5, 10],
+                    'classifier__min_samples_leaf': [1, 2, 4],
+                    'classifier__max_features': ['auto', 'sqrt', 'log2']
+                }
+            },
+            'Decision Tree': {
+                'model': DecisionTreeClassifier(),
+                'params': {
+                    'classifier__criterion': ['gini', 'entropy'],
+                    'classifier__splitter': ['best', 'random'],
+                    'classifier__max_depth': [None, 10, 20, 30],
+                    'classifier__min_samples_split': [2, 5, 10],
+                    'classifier__min_samples_leaf': [1, 2, 4]
+                }
+            },
+            'SVM': {
+                'model': SVC(),
+                'params': {
+                    'classifier__C': [0.1, 1, 10],
+                    'classifier__kernel': ['linear', 'rbf', 'poly'],
+                    'classifier__gamma': ['scale', 'auto', 0.1, 1],
+                    'classifier__degree': [2, 3, 4]
+                }
+            },
+            'KNN': {
+                'model': KNeighborsClassifier(),
+                'params': {
+                    'classifier__n_neighbors': [3, 5, 7, 9],
+                    'classifier__weights': ['uniform', 'distance'],
+                    'classifier__algorithm': ['auto', 'ball_tree', 'kd_tree'],
+                    'classifier__p': [1, 2]
+                }
+            },
+            'Gradient Boosting': {
+                'model': GradientBoostingClassifier(),
+                'params': {
+                    'classifier__learning_rate': [0.01, 0.1, 0.2],
+                    'classifier__n_estimators': [100, 200, 300],
+                    'classifier__max_depth': [3, 4, 5]
+                                }
+            },
+            'AdaBoost': {
+                'model': AdaBoostClassifier(),
+                'params': {
+                    'classifier__n_estimators': [50, 100, 200],
+                    'classifier__learning_rate': [0.01, 0.1, 0.2]
+                }
+            }
+        }
