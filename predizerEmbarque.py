@@ -1,6 +1,7 @@
 import numpy as np
 from datetime import datetime, timedelta
 import pandas as pd
+import os
 
 from sklearn.model_selection import GridSearchCV, cross_val_score, KFold
 from category_encoders import TargetEncoder
@@ -83,13 +84,18 @@ class Aprendizado:
             'Gradient Boosting': {
                 'classifier__n_estimators': [100, 200, 300],
                 'classifier__learning_rate': [0.01, 0.1, 0.2],
-                'classifier__max_depth': [3, 4, 5],
+                'classifier__max_depth': [3, 4, 5]
             },
             'AdaBoost': {
                 'classifier__n_estimators': [50, 100, 200],
                 'classifier__learning_rate': [0.01, 0.1, 0.2]
             }
         }
+        
+    def prever_com_modelo_otimizado(self, modelo_otimizado, X_novos_dados):
+        X_preprocess = pd.DataFrame(X_novos_dados, columns=self.numeric_features + self.categorical_features)
+        previsoes = modelo_otimizado.predict(X_preprocess)
+        return previsoes
 
     def identificar_melhor_modelo(self, X: pd.DataFrame, y: pd.Series):
         melhor_modelo = None
@@ -101,26 +107,29 @@ class Aprendizado:
             pipeline = Pipeline(steps=[('preprocessor', self.preprocessor), ('classifier', modelo)])
             score = cross_val_score(pipeline, X_preprocess, y_np, cv=self.kfold, error_score='raise')
             score_medio = np.mean(score)
-
             if score_medio > melhor_score:
                 parametros = self.hiperparametros.get(nome_modelo, None)
                 melhor_score = score_medio
                 melhor_modelo = (nome_modelo, modelo, score, parametros)
-
         return melhor_modelo
+    
+    def prever_e_salvar(self, modelo_otimizado, X_novos_dados, caminho_saida):
+        X_preprocess = pd.DataFrame(X_novos_dados, columns=self.numeric_features + self.categorical_features)
+        previsoes = modelo_otimizado.predict(X_preprocess)
+        df_previsoes = pd.DataFrame(previsoes, columns=['Previsões'])
+        df_final = pd.concat([X_preprocess, df_previsoes], axis=1)
+        file_path = os.path.join(caminho_saida, 'nome_arquivo.xlsx')
+        df_final.to_excel(file_path, index=False)
     
     def otimizar_modelo_com_hiperparametros(self, X: pd.DataFrame, y: pd.Series, modelo, hiperparametros):
         X_preprocess = pd.DataFrame(X, columns=self.numeric_features + self.categorical_features)
         y_np = y.values
         pipeline = Pipeline(steps=[('preprocessor', self.preprocessor), ('classifier', modelo)])
-        modelo_otimizado = GridSearchCV(estimator=pipeline, param_grid=hiperparametros, cv=self.kfold)
-        score = cross_val_score(modelo_otimizado, X_preprocess, y_np, cv=self.kfold, error_score='raise')
-        return modelo_otimizado, score
+        modelo = GridSearchCV(estimator=pipeline, param_grid=hiperparametros, cv=self.kfold)
+        modelo.fit(X_preprocess, y_np)
+        modelo_otimizado = modelo.best_estimator_
+        return modelo_otimizado
     
-    
-    
-    
-
 class TransformadorDados:
     def __init__(self, treino=False):
         self.treino = treino
@@ -132,26 +141,23 @@ class TransformadorDados:
         
         print(type(df))
         
-        if self.treino:
+        if self.treino == True:
             df = df.drop_duplicates()
             df = df.drop(df[df['Data PCP'] != df['Data de Embarque']].index)
             df = df.drop(df[df['Situação da Entrega'] != 'Faturada'].index)
             df.dropna()
+            df['Data PCP'] = pd.to_datetime(df['Data PCP'], format='%d/%m/%Y', errors='coerce')
+            df['numero_dia_pcp'] = df['Data PCP'].dt.dayofweek
+            colunas_desejadas = ['Data PCP', 'LINHA', 'Código Terceiro', 'Cidade', 'UF', 'Peso Líquido Estimado', 'Terceiro Centralizador', 'Data Acordada', 'numero_dia_pcp']
+        else:
+            colunas_desejadas = ['LINHA', 'Código Terceiro', 'Cidade', 'UF', 'Peso Líquido Estimado', 'Terceiro Centralizador', 'Produto', 'Data Acordada']
+            df = df.drop_duplicates()
+            df.dropna()
 
-        colunas_desejadas = ['Data PCP', 'LINHA', 'Código Terceiro', 'Cidade', 'UF', 'Peso Líquido Estimado', 'Terceiro Centralizador', 'Produto', 'Data Acordada']
         df = df[colunas_desejadas]
 
         df['Data Acordada'] = pd.to_datetime(df['Data Acordada'], format='%d/%m/%Y', errors='coerce')
         df['numero_dia_acordada'] = df['Data Acordada'].dt.dayofweek
-
-        df['Data PCP'] = pd.to_datetime(df['Data PCP'], format='%d/%m/%Y', errors='coerce')
-        df['numero_dia_pcp'] = df['Data PCP'].dt.dayofweek
-        
-        # Adicionando encoders nas colunas LINHA, Cidade e UF
-        label_encoder = LabelEncoder()
-        df['Linha_encoded'] = label_encoder.fit_transform(df['LINHA'])
-        df['Cidade_encoded'] = label_encoder.fit_transform(df['Cidade'])
-        df['Uf_encoded'] = label_encoder.fit_transform(df['UF'])
 
 
         # Remove linhas com valores NaN na coluna 'Peso Líquido Estimado'
@@ -165,6 +171,7 @@ class TransformadorDados:
 
         # Agora você pode aplicar pd.cut
         df['faixa_de_peso'] = pd.cut(df['Peso Líquido Estimado'], bins=self.limites_peso, labels=self.rotulos_peso)
+        df.dropna(subset=['faixa_de_peso'], inplace=True)
         df['faixa_de_peso'] = df['faixa_de_peso'].astype(int)
 
         df['Código Terceiro'] = df['Código Terceiro'].astype(int)
