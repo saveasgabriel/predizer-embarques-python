@@ -20,13 +20,16 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 
 class Aprendizado:
-    def __init__(self):
+    def __init__(self, df_treino:pd.DataFrame):
         self.seed = 10
+        self.num_dias = 35
         self.kfold = KFold(n_splits=10, random_state=self.seed, shuffle=True)
         self.features = Features()
         self.numeric_features = self.features.numeric()
         self.categorical_features = self.features.categorical()
         self.hiperparametros = Hiperparametros()
+        self.transformador = TransformadorDados()
+        self.df_treino = df_treino
 
         self.numeric_transformer = Pipeline(steps=[
             ('imputer', SimpleImputer(strategy='median')),
@@ -44,22 +47,29 @@ class Aprendizado:
                 ('num', self.numeric_transformer, self.numeric_features),
                 ('cat', self.categorical_transformer, self.categorical_features)
             ])
+        
+    def dividir_dados_treino(self):
+        df = self.transformador.transformar(self.df_treino, treino=True)
+        df_recortado = self.transformador.recortar_dataframe(df, num_dias=self.num_dias)
+        X = pd.DataFrame(df_recortado, columns = self.numeric_features + self.categorical_features)
+        y = pd.DataFrame(df_recortado, columns = [self.features.target()[1]])
+
+        self.X_treino = X
+        self.y_treino = y.values
 
     """def prever_com_modelo_otimizado(self, modelo_otimizado, X_novos_dados):
         X_preprocess = pd.DataFrame(X_novos_dados, columns=self.numeric_features + self.categorical_features)
         previsoes = modelo_otimizado.predict(X_preprocess)
         return previsoes"""
 
-    def identificar_melhor_modelo(self, X, y):
-        melhor_score = 0
-        X_preprocess = pd.DataFrame(X, columns = self.numeric_features + self.categorical_features)
-        y_np = y.values
+    def identificar_melhor_modelo(self):
 
+        melhor_score = 0
         for nome_modelo, params in self.hiperparametros.get_hiperparametros().items():
             modelo = params['model']
             hiperparametros = params['params']
             pipeline = Pipeline(steps=[('preprocessor', self.preprocessor), ('classifier', modelo)])
-            score = cross_val_score(pipeline, X_preprocess, y_np, cv=self.kfold, error_score='raise')
+            score = cross_val_score(pipeline, self.X_treino, self.y_treino, cv=self.kfold, error_score='raise')
             score_medio = np.mean(score)
 
             if score_medio > melhor_score:
@@ -70,9 +80,8 @@ class Aprendizado:
 
 
     def imprimir_informacoes_modelo_otimizado(self):
-        #print('A acurácia do modelo é: %.2f%%' % (self.modelo_otimizado.score(X_treino,y_treino) *100))
-        pass
-
+        print('A acurácia do modelo é: %.2f%%' % (self.modelo_otimizado.score(self.X_treino,self.y_treino) *100))
+  
     def imprimir_informacoes_modelo(self):
         nome_modelo, modelo, score_medio, scores, hiperparametros = self.informacoes_melhor_modelo
 
@@ -96,76 +105,65 @@ class Aprendizado:
         file_path = os.path.join(caminho_saida, 'nome_arquivo.xlsx')
         df_final.to_excel(file_path, index=False)"""
     
-    def otimizar_modelo_com_hiperparametros(self, X, y):
-
-        X_preprocess = pd.DataFrame(X, columns=self.numeric_features + self.categorical_features)
-        y_np = y.values
+    def otimizar_modelo_com_hiperparametros(self):
         pipeline = Pipeline(steps=[('preprocessor', self.preprocessor), ('classifier', self.melhor_modelo)])
         modelo = GridSearchCV(estimator=pipeline, param_grid=self.hiperparametros, cv=self.kfold)
-
-        print(self.melhor_modelo)
-        print(self.hiperparametros)
-
-        modelo.fit(X_preprocess, y_np)
+        modelo.fit(self.X_treino, self.y_treino)
         self.modelo_otimizado = modelo.best_estimator_
 
     
 class TransformadorDados:
-    def __init__(self, treino=False):
-        self.treino = treino
+    def __init__(self):
         self.label_encoder = LabelEncoder()
         self.limites_peso = [0, 500, 1500, 5000, float('inf')]
         self.rotulos_peso = [500, 1500, 5000, 28000]
+        self.features = Features()
 
-    def transformar(self, df):
-
-
-
-
-        
-        if self.treino == True:
+    def transformar(self, df, treino):
+        if treino == True:
             df = df.drop_duplicates()
-            df = df.drop(df[df['Data PCP'] != df['Data de Embarque']].index)
-            df = df.drop(df[df['Situação da Entrega'] != 'Faturada'].index)
+            df = df.drop(df[df[self.features.target()[0]] != df[self.features.reference()[0]]].index)
+            df = df.drop(df[df[self.features.decision()[0]] != 'Faturada'].index)
             df.dropna()
-            df['Data PCP'] = pd.to_datetime(df['Data PCP'], format='%d/%m/%Y', errors='coerce')
-            df['numero_dia_pcp'] = df['Data PCP'].dt.dayofweek
-            colunas_desejadas = ['Data PCP', 'LINHA', 'Código Terceiro', 'Cidade', 'UF', 'Peso Líquido Estimado', 'Terceiro Centralizador', 'Data Acordada', 'numero_dia_pcp']
+            df[self.features.target()[0]] = pd.to_datetime(df[self.features.target()[0]], format='%d/%m/%Y', errors='coerce')
+            df[self.features.target()[1]] = df[self.features.target()[0]].dt.dayofweek
+            colunas_desejadas = [self.features.target()[0]] + self.features.categorical() + [self.features.numeric()[0]] + [self.features.numeric()[2]] + [self.features.target()[1]] + self.features.avulsos()
+
         else:
-            colunas_desejadas = ['LINHA', 'Código Terceiro', 'Cidade', 'UF', 'Peso Líquido Estimado', 'Terceiro Centralizador', 'Data Acordada']
+            colunas_desejadas = self.features.categorical() + [self.features.numeric()[0]] + [self.features.numeric()[2]] + self.features.avulsos()
             df = df.drop_duplicates()
             df.dropna()
 
         df = df[colunas_desejadas]
 
-        df['Data Acordada'] = pd.to_datetime(df['Data Acordada'], format='%d/%m/%Y', errors='coerce')
-        df['numero_dia_acordada'] = df['Data Acordada'].dt.dayofweek
-
+        df[self.features.avulsos()[0]] = pd.to_datetime(df[self.features.avulsos()[0]], format='%d/%m/%Y', errors='coerce')
+        df[self.features.numeric()[1]] = df[self.features.avulsos()[0]].dt.dayofweek
 
         # Remove linhas com valores NaN na coluna 'Peso Líquido Estimado'
-        df.dropna(subset=['Peso Líquido Estimado'], inplace=True)
+        df.dropna(subset=[self.features.avulsos()[1]], inplace=True)
 
         # Garanta que os valores da coluna 'Peso Líquido Estimado' sejam do tipo float
-        df['Peso Líquido Estimado'] = pd.to_numeric(df['Peso Líquido Estimado'], errors='coerce')
+        df[self.features.avulsos()[1]] = pd.to_numeric(df[self.features.avulsos()[1]], errors='coerce')
 
         # Lida com valores nulos na coluna 'Peso Líquido Estimado'
-        df['Peso Líquido Estimado'].fillna(0, inplace=True)
+        df[self.features.avulsos()[1]].fillna(0, inplace=True)
 
         # Agora você pode aplicar pd.cut
-        df['faixa_de_peso'] = pd.cut(df['Peso Líquido Estimado'], bins=self.limites_peso, labels=self.rotulos_peso)
-        df.dropna(subset=['faixa_de_peso'], inplace=True)
-        df['faixa_de_peso'] = df['faixa_de_peso'].astype(int)
+        df[self.features.numeric()[3]] = pd.cut(df[self.features.avulsos()[1]], bins=self.limites_peso, labels=self.rotulos_peso)
+        df.dropna(subset=self.features.numeric()[3], inplace=True)
+        df[self.features.numeric()[3]] = df[self.features.numeric()[3]].astype(int)
 
-        df['Código Terceiro'] = df['Código Terceiro'].astype(int)
-        df['Terceiro Centralizador'] = df['Terceiro Centralizador'].astype(int)
+        df[self.features.numeric()[0]] = df[self.features.numeric()[0]].astype(int)
+        df[self.features.numeric()[2]] = df[self.features.numeric()[2]].astype(int)
 
         return df
-    
+
     def recortar_dataframe(self, df, num_dias):
-        data_mais_recente = df['Data PCP'].max()
+        data_mais_recente = df[self.features.target()[0]].max()
         data_inicio = data_mais_recente - timedelta(days=num_dias)
-        df_recortado = df.loc[(df['Data PCP'] >= data_inicio) & (df['Data PCP'] <= data_mais_recente)]
+        df_recortado = df.loc[(df[self.features.target()[0]] >= data_inicio) & (df[self.features.target()[0]] <= data_mais_recente)]
         return df_recortado
+
     
 class Features:
     def numeric(self):
@@ -175,7 +173,7 @@ class Features:
        return ['LINHA', 'Cidade', 'UF']
     
     def target(self):
-        return ['Data PCP']
+        return ['Data PCP', 'numero_dia_pcp']
     
     def decision(self):
         return ['Situação da Entrega']
