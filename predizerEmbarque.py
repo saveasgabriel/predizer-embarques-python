@@ -1,26 +1,36 @@
+# Imports para manipulação de dados e cálculos numéricos
 import numpy as np
-from datetime import datetime, timedelta
 import pandas as pd
+
+# Imports relacionados a ajustes de data e hora
+from datetime import datetime, timedelta
+
+# Imports para manipulação de sistema operacional
 import os
 
-from sklearn.model_selection import GridSearchCV, cross_val_score, KFold
-from category_encoders import TargetEncoder
-from sklearn.ensemble import (
-    RandomForestClassifier,
-    GradientBoostingClassifier,
-    AdaBoostClassifier,
-)
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import accuracy_score
+# Imports para pré-processamento e transformação de dados
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, StandardScaler
-from sklearn.svm import SVC
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 
+# Imports para codificação de variáveis categóricas
+from category_encoders import TargetEncoder
+
+# Imports relacionados a algoritmos de aprendizado de máquina
+from sklearn.model_selection import GridSearchCV, cross_val_score, KFold
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, AdaBoostClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
+
+# Imports para construção de pipelines e transformações de colunas
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+
+# Imports relacionados a métricas de avaliação de modelos
+from sklearn.metrics import accuracy_score
+
 class Aprendizado:
-    def __init__(self, df_treino:pd.DataFrame):
+    def __init__(self, df_treino:pd.DataFrame, df_predizer:pd.DataFrame, dir_previsao, nome_arquivo='previsao_embarques'):
         self.seed = 10
         self.num_dias = 35
         self.kfold = KFold(n_splits=10, random_state=self.seed, shuffle=True)
@@ -30,6 +40,9 @@ class Aprendizado:
         self.hiperparametros = Hiperparametros()
         self.transformador = TransformadorDados()
         self.df_treino = df_treino
+        self.df_predizer = df_predizer
+        self.dir_previsao = dir_previsao
+        self.nome_arquivo = nome_arquivo
 
         self.numeric_transformer = Pipeline(steps=[
             ('imputer', SimpleImputer(strategy='median')),
@@ -56,6 +69,12 @@ class Aprendizado:
 
         self.X_treino = X
         self.y_treino = y.values
+
+    def dividir_dados_predicao(self):
+        df = self.transformador.transformar(self.df_predizer, treino=False)
+        self.X_predizer = pd.DataFrame(df, columns = self.numeric_features + self.categorical_features)
+        self.X_predizer.reset_index(drop=True)
+
 
     """def prever_com_modelo_otimizado(self, modelo_otimizado, X_novos_dados):
         X_preprocess = pd.DataFrame(X_novos_dados, columns=self.numeric_features + self.categorical_features)
@@ -84,7 +103,6 @@ class Aprendizado:
   
     def imprimir_informacoes_modelo(self):
         nome_modelo, modelo, score_medio, scores, hiperparametros = self.informacoes_melhor_modelo
-
         print("Nome do modelo:", nome_modelo)
         print("Modelo:", modelo)
         print(f"Score médio: {score_medio:.2f}")
@@ -94,16 +112,14 @@ class Aprendizado:
         print("Hiperparâmetros:")
         for parametro, valores in hiperparametros.items():
             print(f"    {parametro}: {valores}")
-
-
-    """
-    def prever_e_salvar(self, modelo_otimizado, X_novos_dados, caminho_saida):
-        X_preprocess = pd.DataFrame(X_novos_dados, columns=self.numeric_features + self.categorical_features)
-        previsoes = modelo_otimizado.predict(X_preprocess)
-        df_previsoes = pd.DataFrame(previsoes, columns=['Previsões'])
-        df_final = pd.concat([X_preprocess, df_previsoes], axis=1)
-        file_path = os.path.join(caminho_saida, 'nome_arquivo.xlsx')
-        df_final.to_excel(file_path, index=False)"""
+    
+    def prever_e_salvar(self):
+        previsoes = self.modelo_otimizado.predict(self.X_predizer)
+        df_previsoes = pd.DataFrame(previsoes, columns=['dia_semana_data_pcp'])
+        df_final = pd.concat([self.X_predizer, df_previsoes], axis=1)
+        #df_final = df_final.reset_index(drop=True)
+        file_path = os.path.join(self.dir_previsao, (self.nome_arquivo+'.xlsx'))
+        df_final.to_excel(file_path, index=True)
     
     def otimizar_modelo_com_hiperparametros(self):
         pipeline = Pipeline(steps=[('preprocessor', self.preprocessor), ('classifier', self.melhor_modelo)])
@@ -156,13 +172,14 @@ class TransformadorDados:
         df[self.features.numeric()[0]] = df[self.features.numeric()[0]].astype(int)
         df[self.features.numeric()[2]] = df[self.features.numeric()[2]].astype(int)
 
-        return df
+        
+        return df.reset_index(drop=True)
 
     def recortar_dataframe(self, df, num_dias):
         data_mais_recente = df[self.features.target()[0]].max()
         data_inicio = data_mais_recente - timedelta(days=num_dias)
         df_recortado = df.loc[(df[self.features.target()[0]] >= data_inicio) & (df[self.features.target()[0]] <= data_mais_recente)]
-        return df_recortado
+        return df_recortado.reset_index(drop=True)
 
     
 class Features:
