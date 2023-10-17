@@ -1,0 +1,5 @@
+# Arquivos e diretórios a serem ignorados
+amb-env
+.vscode
+__pycache__
+/previsoes/previsao_embarques.xlsx
