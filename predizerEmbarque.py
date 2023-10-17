@@ -114,10 +114,12 @@ class Aprendizado:
     def prever_e_salvar(self):
         previsoes = self.modelo_otimizado.predict(self.X_predizer)
         df_previsoes = pd.DataFrame(previsoes, columns=['dia_semana_data_pcp'])
-        df_final = pd.concat([self.X_predizer, df_previsoes], axis=1)
+        df_final = pd.concat([self.df_predizer, df_previsoes], axis=1)
         df_final = df_final.reset_index(drop=True)
         file_path = os.path.join(self.dir_previsao, (self.nome_arquivo+'.xlsx'))
-        df_final.to_excel(file_path, index=True)
+        df_final.to_excel(file_path, index=False)
+
+        print(df_final)
     
     def otimizar_modelo_com_hiperparametros(self):
         pipeline = Pipeline(steps=[('preprocessor', self.preprocessor), ('classifier', self.melhor_modelo)])
@@ -135,18 +137,13 @@ class TransformadorDados:
 
     def transformar(self, df, treino):
         if treino:
-            df = df.drop_duplicates()
-            df = df.drop(df[df[self.features.target()[0]] != df[self.features.reference()[0]]].index)
-            df = df.drop(df[df[self.features.decision()[0]] != 'Faturada'].index)
-            df.dropna()
+            df = df[df[self.features.target()[0]] == df[self.features.reference()[0]]]
+            df = df[df[self.features.decision()[0]] == 'Faturada']
             df[self.features.target()[0]] = pd.to_datetime(df[self.features.target()[0]], format='%d/%m/%Y', errors='coerce')
             df[self.features.target()[1]] = df[self.features.target()[0]].dt.dayofweek
             colunas_desejadas = [self.features.target()[0]] + self.features.categorical() + [self.features.numeric()[0]] + [self.features.numeric()[2]] + [self.features.target()[1]] + self.features.avulsos()
-
         else:
             colunas_desejadas = self.features.categorical() + [self.features.numeric()[0]] + [self.features.numeric()[2]] + self.features.avulsos()
-            df = df.drop_duplicates()
-            df.dropna()
 
         df = df[colunas_desejadas]
 
@@ -155,11 +152,7 @@ class TransformadorDados:
 
         # Remove linhas com valores NaN na coluna 'Peso Líquido Estimado'
         df.dropna(subset=[self.features.avulsos()[1]], inplace=True)
-
-        # Garanta que os valores da coluna 'Peso Líquido Estimado' sejam do tipo float
         df[self.features.avulsos()[1]] = pd.to_numeric(df[self.features.avulsos()[1]], errors='coerce')
-
-        # Lida com valores nulos na coluna 'Peso Líquido Estimado'
         df[self.features.avulsos()[1]].fillna(0, inplace=True)
 
         # Agora você pode aplicar pd.cut
@@ -170,14 +163,15 @@ class TransformadorDados:
         df[self.features.numeric()[0]] = df[self.features.numeric()[0]].astype(int)
         df[self.features.numeric()[2]] = df[self.features.numeric()[2]].astype(int)
 
-        
-        return df.reset_index(drop=True)
+        df.dropna(inplace=True)
+
+        return df
 
     def recortar_dataframe(self, df, num_dias):
         data_mais_recente = df[self.features.target()[0]].max()
         data_inicio = data_mais_recente - timedelta(days=num_dias)
         df_recortado = df.loc[(df[self.features.target()[0]] >= data_inicio) & (df[self.features.target()[0]] <= data_mais_recente)]
-        return df_recortado.reset_index(drop=True)
+        return df_recortado
 
 class Features:
     def numeric(self):
