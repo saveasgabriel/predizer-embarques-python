@@ -6,7 +6,7 @@ warnings.filterwarnings('ignore')
 
 df_treino = pd.read_excel("base_completa_sem_filtro.xlsx", sheet_name="completo")
 df_teste = pd.read_excel("futuro.xlsx", sheet_name="completo")
-diretorio_previsao = 'previsoes\\'
+diretorio_previsao = 'previsoes/'
 
 aprendizado = Aprendizado(df_treino, df_teste, diretorio_previsao)
 aprendizado.dividir_dados_treino()

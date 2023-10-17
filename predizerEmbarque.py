@@ -61,12 +61,18 @@ class Aprendizado:
                 ('cat', self.categorical_transformer, self.categorical_features)
             ])
         
+        self.X_treino = None
+        self.y_treino = None
+        self.X_predizer = None
+        self.informacoes_melhor_modelo = None
+        self.melhor_modelo = None
+        self.modelo_otimizado = None
+        
     def dividir_dados_treino(self):
         df = self.transformador.transformar(self.df_treino, treino=True)
         df_recortado = self.transformador.recortar_dataframe(df, num_dias=self.num_dias)
         X = pd.DataFrame(df_recortado, columns = self.numeric_features + self.categorical_features)
         y = pd.DataFrame(df_recortado, columns = [self.features.target()[1]])
-
         self.X_treino = X
         self.y_treino = y.values
 
@@ -75,14 +81,7 @@ class Aprendizado:
         self.X_predizer = pd.DataFrame(df, columns = self.numeric_features + self.categorical_features)
         self.X_predizer.reset_index(drop=True)
 
-
-    """def prever_com_modelo_otimizado(self, modelo_otimizado, X_novos_dados):
-        X_preprocess = pd.DataFrame(X_novos_dados, columns=self.numeric_features + self.categorical_features)
-        previsoes = modelo_otimizado.predict(X_preprocess)
-        return previsoes"""
-
     def identificar_melhor_modelo(self):
-
         melhor_score = 0
         for nome_modelo, params in self.hiperparametros.get_hiperparametros().items():
             modelo = params['model']
@@ -96,7 +95,6 @@ class Aprendizado:
                 self.informacoes_melhor_modelo = (nome_modelo, modelo, score_medio, score, hiperparametros)
                 self.hiperparametros = hiperparametros
                 self.melhor_modelo = modelo  
-
 
     def imprimir_informacoes_modelo_otimizado(self):
         print('A acurácia do modelo é: %.2f%%' % (self.modelo_otimizado.score(self.X_treino,self.y_treino) *100))
@@ -117,7 +115,7 @@ class Aprendizado:
         previsoes = self.modelo_otimizado.predict(self.X_predizer)
         df_previsoes = pd.DataFrame(previsoes, columns=['dia_semana_data_pcp'])
         df_final = pd.concat([self.X_predizer, df_previsoes], axis=1)
-        #df_final = df_final.reset_index(drop=True)
+        df_final = df_final.reset_index(drop=True)
         file_path = os.path.join(self.dir_previsao, (self.nome_arquivo+'.xlsx'))
         df_final.to_excel(file_path, index=True)
     
@@ -136,7 +134,7 @@ class TransformadorDados:
         self.features = Features()
 
     def transformar(self, df, treino):
-        if treino == True:
+        if treino:
             df = df.drop_duplicates()
             df = df.drop(df[df[self.features.target()[0]] != df[self.features.reference()[0]]].index)
             df = df.drop(df[df[self.features.decision()[0]] != 'Faturada'].index)
@@ -181,7 +179,6 @@ class TransformadorDados:
         df_recortado = df.loc[(df[self.features.target()[0]] >= data_inicio) & (df[self.features.target()[0]] <= data_mais_recente)]
         return df_recortado.reset_index(drop=True)
 
-    
 class Features:
     def numeric(self):
        return ['Código Terceiro', 'numero_dia_acordada', 'Terceiro Centralizador', 'faixa_de_peso']
@@ -200,8 +197,7 @@ class Features:
     
     def avulsos(self):
         return ['Data Acordada', 'Peso Líquido Estimado']
-
-
+    
 class Hiperparametros:
     def get_hiperparametros(self):
         return {
