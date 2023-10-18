@@ -1,1 +1,1 @@
-pip install numpy, pandas, scikit-learn, category_encoders, openpyxl
+pip install numpy pandas scikit-learn category_encoders openpyxl 

@@ -118,7 +118,7 @@ class Aprendizado:
         df_final = df_final.reset_index(drop=True)
         file_path = os.path.join(self.dir_previsao, (self.nome_arquivo+'.xlsx'))
         df_final.to_excel(file_path, index=False)
-
+ 
         print(df_final)
     
     def otimizar_modelo_com_hiperparametros(self):
