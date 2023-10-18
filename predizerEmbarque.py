@@ -118,7 +118,21 @@ class Aprendizado:
         df_final = df_final.reset_index(drop=True)
         file_path = os.path.join(self.dir_previsao, (self.nome_arquivo+'.xlsx'))
         df_final.to_excel(file_path, index=False)
- 
+        print(df_final)
+
+    def prever_e_salvar_data(self):
+        previsoes = self.modelo_otimizado.predict(self.X_predizer)
+        df_previsoes = pd.DataFrame(previsoes, columns=['dia_semana_data_pcp'])
+
+        # Adicionando a lógica de conversão do número para data da semana seguinte
+        df_previsoes['data_pcp'] = df_previsoes['dia_semana_data_pcp'].apply(
+            lambda x: (datetime.now() + timedelta(days=(7 - int(x)))).strftime('%d/%m/%Y')
+        )
+
+        df_final = pd.concat([self.df_predizer, df_previsoes['data_pcp']], axis=1)
+        df_final = df_final.reset_index(drop=True)
+        file_path = os.path.join(self.dir_previsao, (self.nome_arquivo+'.xlsx'))
+        df_final.to_excel(file_path, index=False)
         print(df_final)
     
     def otimizar_modelo_com_hiperparametros(self):
